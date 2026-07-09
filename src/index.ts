@@ -94,21 +94,23 @@ while (true) {
 
   let message = await callModel(true);
 
-  const toolCall = message.tool_calls?.[0];
-  if (toolCall?.type === "function") {
-    // Keep only the first tool call; ignore any extras for this prompt.
-    messages.push({ ...message, tool_calls: [toolCall] });
-    const { path } = JSON.parse(toolCall.function.arguments);
-    console.log(chalk.yellow(`Tool: read_file(${path})`));
-    const result = readFile(path);
-    log(`[tool] read_file(${path}): ${result.length} chars`);
-    messages.push({
-      role: "tool",
-      tool_call_id: toolCall.id,
-      content: result,
-    });
-    // Second call has no tools, so the model must answer with text.
+  const toolCalls = message.tool_calls ?? [];
+  if (toolCalls.length > 0) {
+    // Run the whole batch the model asked for, in order.
+    messages.push(message);
+    for (const call of toolCalls) {
+      if (call.type !== "function") continue;
+      const { path } = JSON.parse(call.function.arguments);
+      console.log(chalk.yellow(`Tool: read_file(${path})`));
+      const result = readFile(path);
+      log(`[tool] read_file(${path}): ${result.length} chars`);
+      messages.push({ role: "tool", tool_call_id: call.id, content: result });
+    }
+    // One batch per prompt: the second call offers no tools.
     message = await callModel(false);
+    if (message.tool_calls?.length) {
+      console.log(chalk.red("(Only one tool-call batch runs per prompt; ignoring further tool requests.)"));
+    }
   }
 
   console.log(chalk.green("Coady:"));
