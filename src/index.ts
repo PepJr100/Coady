@@ -3,8 +3,8 @@ import { createInterface } from "node:readline/promises";
 import chalk from "chalk";
 import { marked, type MarkedExtension } from "marked";
 import { markedTerminal } from "marked-terminal";
-import { appendFileSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { appendFileSync, readFileSync, readdirSync } from "node:fs";
+import { resolve, relative, join } from "node:path";
 
 const apiKey = process.env.OPENROUTER_API_KEY;
 if (!apiKey) {
@@ -37,6 +37,51 @@ function readFile(path: string): string {
   }
 }
 
+function listFiles(dir: string): string {
+  const full = resolve(process.cwd(), dir);
+  if (!full.startsWith(process.cwd())) {
+    return `Error: ${dir} is outside the project.`;
+  }
+  try {
+    return readdirSync(full, { withFileTypes: true })
+      .map((entry) => (entry.isDirectory() ? `${entry.name}/` : entry.name))
+      .join("\n");
+  } catch (error) {
+    return `Error listing ${dir}: ${String(error)}`;
+  }
+}
+
+// Skip noise so search stays fast and readable.
+const ignored = new Set(["node_modules", ".git"]);
+
+function search(query: string): string {
+  const matches: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (ignored.has(entry.name) || entry.name.startsWith(".")) continue;
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      const rel = relative(process.cwd(), full);
+      readFileSync(full, "utf8")
+        .split("\n")
+        .forEach((line, i) => {
+          if (line.includes(query)) matches.push(`${rel}:${i + 1}: ${line.trim()}`);
+        });
+    }
+  };
+  walk(process.cwd());
+  return matches.length ? matches.join("\n") : `No matches for "${query}".`;
+}
+
+const toolHandlers: Record<string, (args: any) => string> = {
+  read_file: ({ path }) => readFile(path),
+  list_files: ({ path }) => listFiles(path ?? "."),
+  search: ({ query }) => search(query),
+};
+
 const tools: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: "function",
@@ -49,6 +94,36 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
           path: { type: "string", description: "Relative path from the project root." },
         },
         required: ["path"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_files",
+      description: "List files and folders inside a project directory.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            description: "Relative directory from the project root. Defaults to the root.",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "search",
+      description: "Search project file contents for a text query.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Text to search for." },
+        },
+        required: ["query"],
       },
     },
   },
@@ -74,7 +149,9 @@ async function callModel(useTools: boolean) {
   const calls = message.tool_calls;
   if (calls?.length) {
     const parts = calls.map((c) =>
-      c.type === "function" ? `${c.function.name}(${JSON.parse(c.function.arguments).path})` : c.type,
+      c.type === "function"
+        ? `${c.function.name}(${Object.values(JSON.parse(c.function.arguments)).join(", ")})`
+        : c.type,
     );
     log(`[llm] response: tool_calls: ${parts.join(", ")}`);
   } else if (message.content?.trim()) {
@@ -85,6 +162,24 @@ async function callModel(useTools: boolean) {
 
   return message;
 }
+
+const cactus = [
+  "        ||",
+  "    ||  ||",
+  "    ||  ||  ||",
+  "    ||  ||  ||",
+  "    ||__||  ||",
+  "        ||__||",
+  "        ||",
+  "        ||",
+  "      __||__",
+  "     |______|",
+].join("\n");
+
+console.log(chalk.green(cactus));
+console.log(`  ${chalk.green.bold("Coady")}${chalk.dim(" — your terminal coding agent")}`);
+console.log(chalk.dim(`  model: ${model}`));
+console.log(chalk.dim("─".repeat(40)));
 
 log(`[start] model: ${model}`);
 
@@ -100,10 +195,12 @@ while (true) {
     messages.push(message);
     for (const call of message.tool_calls) {
       if (call.type !== "function") continue;
-      const { path } = JSON.parse(call.function.arguments);
-      console.log(chalk.yellow(`Tool: read_file(${path})`));
-      const result = readFile(path);
-      log(`[tool] read_file(${path}): ${result.length} chars`);
+      const args = JSON.parse(call.function.arguments);
+      const label = `${call.function.name}(${Object.values(args).join(", ")})`;
+      console.log(chalk.yellow(`Tool: ${label}`));
+      const handler = toolHandlers[call.function.name];
+      const result = handler ? handler(args) : `Error: unknown tool ${call.function.name}`;
+      log(`[tool] ${label}: ${result.length} chars`);
       messages.push({ role: "tool", tool_call_id: call.id, content: result });
     }
     rounds++;
