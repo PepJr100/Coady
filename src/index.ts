@@ -3,8 +3,27 @@ import { createInterface } from "node:readline/promises";
 import chalk from "chalk";
 import { marked, type MarkedExtension } from "marked";
 import { markedTerminal } from "marked-terminal";
-import { appendFileSync, readFileSync, readdirSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, relative, join } from "node:path";
+
+// Load local secrets (e.g. OPENROUTER_API_KEY) from a gitignored file so a
+// stale or missing shell environment can't get in the way. Values in the file
+// win over the environment, which is the whole point: it is the source of truth.
+function loadSecrets(file: string): void {
+  if (!existsSync(file)) return;
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    let entry = line.trim();
+    if (!entry || entry.startsWith("#")) continue;
+    if (entry.startsWith("export ")) entry = entry.slice("export ".length).trim();
+    const eq = entry.indexOf("=");
+    if (eq === -1) continue;
+    const key = entry.slice(0, eq).trim();
+    const value = entry.slice(eq + 1).trim().replace(/^['"]|['"]$/g, "");
+    process.env[key] = value;
+  }
+}
+
+loadSecrets(".local/secrets.envrc");
 
 const apiKey = process.env.OPENROUTER_API_KEY;
 if (!apiKey) {

@@ -15,10 +15,26 @@ Assume Node.js is installed.
 npm install
 ```
 
-Set your [OpenRouter](https://openrouter.ai/) API key and model:
+### Configure your key and model
+
+**Recommended: a local secrets file.** Create `.local/secrets.envrc` (gitignored, never committed):
 
 ```sh
-export OPENROUTER_API_KEY=your-key
+export OPENROUTER_API_KEY='your-key'
+export OPENROUTER_MODEL='google/gemini-2.5-flash'
+```
+
+On startup Coady loads this file, and its values **take precedence over the shell
+environment**. This sidesteps a common trap where a terminal (or editor, e.g. VS
+Code caching its launch environment) holds a stale key that overrides the one you
+set — the file is the single source of truth. The same file is also picked up by
+[`direnv`](https://direnv.net/) via `.envrc`, so it works in both places.
+
+**Alternative: environment variables.** If no secrets file is present, Coady falls
+back to the environment:
+
+```sh
+export OPENROUTER_API_KEY='your-key'
 export OPENROUTER_MODEL='google/gemini-2.5-flash'
 ```
 
