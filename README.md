@@ -4,6 +4,9 @@ Coady is a small coding agent I built from scratch to learn how coding agents ac
 
 It is being built by following [Matt Wynne's coding-agent-tutorial](https://github.com/mattwynne/coding-agent-tutorial), one spec at a time. Each iteration adds a single capability, kept as small and clear as possible so the agent mechanics are easy to see. The specs I'm working through live in [`docs/specs`](docs/specs).
 
+## Screenshot
+![Coady running in the terminal](docs/Pics/Screenshot%202026-07-09%20140619.png)
+
 ## Setup
 
 Assume Node.js is installed.
@@ -24,10 +27,8 @@ export OPENROUTER_MODEL='google/gemini-2.5-flash'
 ```sh
 npm start
 ```
-
 On start, Coady prints a small banner (cactus, name, and the active model) so you can see which model is in use.
 
-![Coady running in the terminal](docs/Pics/Screenshot%202026-07-09%20140619.png)
 
 ## Tools
 
