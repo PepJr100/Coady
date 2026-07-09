@@ -15,12 +15,15 @@ const client = new OpenAI({
 const model = process.env.OPENROUTER_MODEL ?? "openai/gpt-oss-20b:free";
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
-const prompt = await rl.question("You: ");
-rl.close();
+rl.on("SIGINT", () => process.exit(0));
 
-const response = await client.chat.completions.create({
-  model,
-  messages: [{ role: "user", content: prompt }],
-});
+while (true) {
+  const prompt = await rl.question("You: ");
 
-console.log(`Assistant: ${response.choices[0].message.content}`);
+  const response = await client.chat.completions.create({
+    model,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  console.log(`Assistant: ${response.choices[0].message.content}`);
+}
