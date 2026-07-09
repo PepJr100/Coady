@@ -3,7 +3,7 @@ import { createInterface } from "node:readline/promises";
 import chalk from "chalk";
 import { marked, type MarkedExtension } from "marked";
 import { markedTerminal } from "marked-terminal";
-import { readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const apiKey = process.env.OPENROUTER_API_KEY;
@@ -54,16 +54,45 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
   },
 ];
 
+function log(entry: string): void {
+  appendFileSync("agent.log", `${new Date().toISOString()} ${entry}\n`);
+}
+
+async function callModel(useTools: boolean) {
+  const toolNames = tools
+    .map((t) => (t.type === "function" ? t.function.name : t.type))
+    .join(", ");
+  log(`[llm] request: ${messages.length} messages, tools: ${useTools ? toolNames : "none"}`);
+
+  const response = await client.chat.completions.create({
+    model,
+    messages,
+    tools: useTools ? tools : undefined,
+  });
+  const message = response.choices[0].message;
+
+  const calls = message.tool_calls;
+  if (calls?.length) {
+    const parts = calls.map((c) =>
+      c.type === "function" ? `${c.function.name}(${JSON.parse(c.function.arguments).path})` : c.type,
+    );
+    log(`[llm] response: tool_calls: ${parts.join(", ")}`);
+  } else if (message.content?.trim()) {
+    log(`[llm] response: assistant text: ${message.content.length} chars`);
+  } else {
+    log("[llm] response: empty");
+  }
+
+  return message;
+}
+
+log(`[start] model: ${model}`);
+
 while (true) {
   const prompt = await rl.question(`${chalk.cyan("You:")} `);
   messages.push({ role: "user", content: prompt });
 
-  let response = await client.chat.completions.create({
-    model,
-    messages,
-    tools,
-  });
-  let message = response.choices[0].message;
+  let message = await callModel(true);
 
   const toolCall = message.tool_calls?.[0];
   if (toolCall?.type === "function") {
@@ -71,17 +100,18 @@ while (true) {
     messages.push({ ...message, tool_calls: [toolCall] });
     const { path } = JSON.parse(toolCall.function.arguments);
     console.log(chalk.yellow(`Tool: read_file(${path})`));
+    const result = readFile(path);
+    log(`[tool] read_file(${path}): ${result.length} chars`);
     messages.push({
       role: "tool",
       tool_call_id: toolCall.id,
-      content: readFile(path),
+      content: result,
     });
     // Second call has no tools, so the model must answer with text.
-    response = await client.chat.completions.create({ model, messages });
-    message = response.choices[0].message;
+    message = await callModel(false);
   }
 
-  console.log(chalk.green("Assistant:"));
+  console.log(chalk.green("Coady:"));
   const text = message.content ?? "";
   console.log(text.trim() ? marked.parse(text) : chalk.dim("(The model returned no text.)"));
   console.log(chalk.dim("─".repeat(40)));
