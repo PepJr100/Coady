@@ -94,11 +94,11 @@ while (true) {
 
   let message = await callModel(true);
 
-  const toolCalls = message.tool_calls ?? [];
-  if (toolCalls.length > 0) {
-    // Run the whole batch the model asked for, in order.
+  let rounds = 0;
+  while (message.tool_calls?.length) {
+    // Run this round's batch, in order.
     messages.push(message);
-    for (const call of toolCalls) {
+    for (const call of message.tool_calls) {
       if (call.type !== "function") continue;
       const { path } = JSON.parse(call.function.arguments);
       console.log(chalk.yellow(`Tool: read_file(${path})`));
@@ -106,11 +106,15 @@ while (true) {
       log(`[tool] read_file(${path}): ${result.length} chars`);
       messages.push({ role: "tool", tool_call_id: call.id, content: result });
     }
-    // One batch per prompt: the second call offers no tools.
-    message = await callModel(false);
-    if (message.tool_calls?.length) {
-      console.log(chalk.red("(Only one tool-call batch runs per prompt; ignoring further tool requests.)"));
+    rounds++;
+    if (rounds >= 5) {
+      console.log(chalk.red("(Reached the 5 tool-call round limit.)"));
+      // Force a final answer with no tools so history has no dangling calls.
+      message = await callModel(false);
+      break;
     }
+    // Offer tools again so the model can ask for another round.
+    message = await callModel(true);
   }
 
   console.log(chalk.green("Coady:"));
