@@ -1,8 +1,8 @@
 # Coady
 
-Coady is a small coding agent I built from scratch to learn how coding agents actually work under the hood.
+Coady is a small coding agent. Built from scratch to learn how coding agents actually work under the hood.
 
-It is being built by following [Matt Wynne's coding-agent-tutorial](https://github.com/mattwynne/coding-agent-tutorial), one spec at a time. Each iteration adds a single capability, kept as small and clear as possible so the agent mechanics are easy to see. The specs I'm working through live in [`docs/specs`](docs/specs).
+It is built following [Matt Wynne's coding-agent-tutorial](https://github.com/mattwynne/coding-agent-tutorial). Which builds a coding agent with you, one spec at a time. Each iteration adds a single capability, kept small and clear so the agent mechanics are easy to see. The specs I've worked through live in [`docs/specs`](docs/specs).
 
 ## Screenshot
 ![Coady running in the terminal](docs/Pics/Screenshot%202026-07-09%20140619.png)
